@@ -582,6 +582,8 @@ wss.on("connection", (ws) => {
           lobby.totalGuesses++;
 
           const isWaltonSpecial = cleanWord === "walton" && cleanWord.includes(prompt);
+          const isGhenisaSpecial = cleanWord === "ghenisa" && cleanWord.includes(prompt);
+          const isSpecialAllowedWord = isWaltonSpecial || isGhenisaSpecial;
 
           // Validation 1: Match prompt
           if (!cleanWord || !cleanWord.includes(prompt)) {
@@ -604,7 +606,7 @@ wss.on("connection", (ws) => {
           }
 
           // Validation 2: Already used
-          if (!isWaltonSpecial && lobby.usedWords.map(uw => uw.toLowerCase()).includes(cleanWord)) {
+          if (!isSpecialAllowedWord && lobby.usedWords.map(uw => uw.toLowerCase()).includes(cleanWord)) {
             lobby.playedWordsDetail.push({
               word: cleanWord.toUpperCase(),
               player: activePlayer.name,
@@ -622,7 +624,7 @@ wss.on("connection", (ws) => {
           }
 
           // Validation 3: Check dictionary (exhaustive lookup using wordSet and fallback API)
-          let isValid = isWaltonSpecial || wordSet.has(cleanWord);
+          let isValid = isSpecialAllowedWord || wordSet.has(cleanWord);
           if (!isValid) {
             try {
               console.log(`Checking live English Dictionary API fallback for: ${cleanWord}`);

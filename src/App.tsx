@@ -213,6 +213,8 @@ export default function App() {
             let text = success ? `NICE ONE. "${word}"` : `❌ ${reason}`;
             if (success && word === "WALTON") {
               text = "GOOD BOY!";
+            } else if (success && word === "GHENISA") {
+              text = "SUSSY?";
             }
             setFeedback({ id: Math.random().toString(), text, isSuccess: success });
             if (success) {
