@@ -882,9 +882,11 @@ async function startServer() {
     console.log(`Serving static files from ${distPath}`);
   }
 
-  // Bind to port 3000 in dev to respect the hardcoded AI Studio container ingress,
-  // but use the dynamic process.env.PORT in production (Render/Glitch) to adapt correctly.
-  const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+  // Bind to port 3000 in dev to respect the hardcoded AI Studio container ingress.
+  // In production, use the dynamic process.env.PORT (Render/Glitch), or default to 7860 (Hugging Face).
+  const PORT = process.env.NODE_ENV === "production"
+    ? (process.env.PORT ? parseInt(process.env.PORT) : 7860)
+    : 3000;
 
   httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(`Server listening on http://0.0.0.0:${PORT}`);
