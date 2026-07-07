@@ -370,6 +370,39 @@ export default function App() {
   const activePlayer = lobby ? lobby.players[lobby.activePlayerIndex] : null;
   const isOurTurn = activePlayer && activePlayer.id === playerId;
 
+  // Automatically focus the input field on mobile / desktop when it's our turn
+  useEffect(() => {
+    if (isOurTurn && inputRef.current) {
+      const focusInput = () => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+          // Ensure virtual keyboard triggers by calling click and positioning caret at the end
+          inputRef.current.click();
+          const len = inputRef.current.value.length;
+          try {
+            inputRef.current.setSelectionRange(len, len);
+          } catch (e) {
+            // Ignored if type doesn't support selection range
+          }
+        }
+      };
+
+      // Try immediately
+      focusInput();
+
+      // Progressive timeouts to handle render lag, transitions, or disabled state changes
+      const t1 = setTimeout(focusInput, 50);
+      const t2 = setTimeout(focusInput, 150);
+      const t3 = setTimeout(focusInput, 300);
+
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+      };
+    }
+  }, [isOurTurn, lobby?.prompt, lobby?.activePlayerIndex]);
+
   const getGameOverBanner = () => {
     if (!lobby) return { text: "💀 DEFEATED", style: "bg-red-600 text-white" };
 
@@ -971,7 +1004,13 @@ export default function App() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="w-full max-w-2xl flex flex-col space-y-6"
+                onClick={() => {
+                  if (isOurTurn && inputRef.current) {
+                    inputRef.current.focus();
+                    inputRef.current.click();
+                  }
+                }}
+                className="w-full max-w-2xl flex flex-col space-y-6 cursor-pointer"
               >
                 {/* Active turn banner and Quit button */}
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 w-full border-b-[3px] border-white/20 pb-4">
@@ -991,7 +1030,10 @@ export default function App() {
                   </div>
                   <div className="shrink-0">
                     <button
-                      onClick={leaveLobby}
+                      onClick={(e) => {
+                        e.stopPropagation(); // Prevent focusing input when clicking quit
+                        leaveLobby();
+                      }}
                       className="bg-red-600 hover:bg-red-700 text-white border-[3px] border-white px-4 py-2 text-xs font-black uppercase tracking-widest rounded-none transition-all active:translate-y-0.5 shadow-[3px_3px_0px_0px_white]"
                     >
                       QUIT GAME
@@ -1028,14 +1070,11 @@ export default function App() {
                 </div>
 
                 {/* Spaced Input Field (Image 4) */}
-                <div className="w-full max-w-md mx-auto">
+                <div className="w-full max-w-md mx-auto" onClick={(e) => e.stopPropagation()}>
                   <form onSubmit={submitWord} className="relative flex flex-col items-center gap-3">
                     <div className="w-full relative">
                       <input 
-                        ref={(el) => {
-                          inputRef.current = el;
-                          if (el && isOurTurn) el.focus();
-                        }}
+                        ref={inputRef}
                         type="text"
                         placeholder={isOurTurn ? "TYPE WORD..." : "WAITING..."}
                         value={inputText}
