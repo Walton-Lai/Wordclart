@@ -74,6 +74,7 @@ interface Player {
   isHost: boolean;
   avatarSeed: string;
   isConnected: boolean;
+  typingText?: string;
 }
 
 interface Lobby {
@@ -178,16 +179,18 @@ function getRoundSettings(round: number): { duration: number; promptLength: numb
 }
 
 // Helper to select an appropriate prompt of length L based on actual words in the dictionary
-function generatePrompt(length: number): string {
+function generatePrompt(length: number, exclude?: string): string {
   // Use commonWords (the Google 10,000 English word list) to find highly playable prompts.
   const sourceWords = commonWords.filter(w => w.length >= length && /^[a-z]+$/.test(w));
   const pool = sourceWords.length > 100 ? sourceWords : dictionary.filter(w => w.length >= length && /^[a-z]+$/.test(w));
 
+  const upperExclude = exclude ? exclude.toUpperCase() : null;
+
   if (pool.length === 0) {
-    if (length === 1) return "A";
-    if (length === 2) return "TH";
-    if (length === 3) return "STR";
-    return "TION";
+    if (length === 1) return "A" === upperExclude ? "E" : "A";
+    if (length === 2) return "TH" === upperExclude ? "IN" : "TH";
+    if (length === 3) return "STR" === upperExclude ? "ING" : "STR";
+    return "TION" === upperExclude ? "NESS" : "TION";
   }
 
   // Attempt up to 100 times to extract a clean alphabetical substring from a random word
@@ -195,6 +198,11 @@ function generatePrompt(length: number): string {
     const word = pool[Math.floor(Math.random() * pool.length)];
     const start = Math.floor(Math.random() * (word.length - length + 1));
     const sub = word.slice(start, start + length).toUpperCase();
+
+    if (upperExclude && sub === upperExclude) {
+      continue;
+    }
+
     if (/^[A-Z]+$/.test(sub)) {
       // Avoid 2 and 3 letter prompts that literally spell out an English word itself (e.g. AGE, ATE, ARE, etc.)
       if ((length === 2 || length === 3) && wordSet.has(sub.toLowerCase())) {
@@ -213,7 +221,12 @@ function generatePrompt(length: number): string {
   }
 
   // Pure fallbacks
-  return length === 1 ? "A" : length === 2 ? "TH" : length === 3 ? "STR" : "TION";
+  const fallbacks = length === 1 ? ["A", "E", "O", "I"] : length === 2 ? ["TH", "IN", "ER", "AN"] : length === 3 ? ["STR", "ING", "ENT", "TER"] : ["TION", "NESS", "MENT", "ABLE"];
+  for (const fb of fallbacks) {
+    if (upperExclude && fb === upperExclude) continue;
+    return fb;
+  }
+  return fallbacks[0];
 }
 
 function transitionToNextTurn(lobby: Lobby, wss: WebSocketServer) {
@@ -247,9 +260,13 @@ function transitionToNextTurn(lobby: Lobby, wss: WebSocketServer) {
   }
   lobby.activePlayerIndex = nextIndex;
 
+  // Reset all players' typing text for the new turn
+  lobby.players.forEach(p => p.typingText = "");
+
   // 4. Get settings for the current round
   const settings = getRoundSettings(lobby.currentRound);
-  lobby.prompt = generatePrompt(settings.promptLength);
+  const oldPrompt = lobby.prompt;
+  lobby.prompt = generatePrompt(settings.promptLength, oldPrompt);
   lobby.currentTurnDuration = settings.duration;
   lobby.turnTimerRemaining = lobby.currentTurnDuration;
   lobby.turnExpiresAt = Date.now() + lobby.currentTurnDuration;
@@ -482,7 +499,8 @@ wss.on("connection", (ws) => {
                 freshLobby.currentRound = 1;
                 freshLobby.turnsPlayedInCurrentRound = 0;
                 const settings = getRoundSettings(1);
-                freshLobby.prompt = generatePrompt(settings.promptLength);
+                const oldPrompt = freshLobby.prompt;
+                freshLobby.prompt = generatePrompt(settings.promptLength, oldPrompt);
                 freshLobby.currentTurnDuration = settings.duration;
                 freshLobby.turnTimerRemaining = freshLobby.currentTurnDuration;
                 freshLobby.turnExpiresAt = Date.now() + freshLobby.currentTurnDuration;
@@ -548,7 +566,8 @@ wss.on("connection", (ws) => {
               freshLobby.currentRound = 1;
               freshLobby.turnsPlayedInCurrentRound = 0;
               const settings = getRoundSettings(1);
-              freshLobby.prompt = generatePrompt(settings.promptLength);
+              const oldPrompt = freshLobby.prompt;
+              freshLobby.prompt = generatePrompt(settings.promptLength, oldPrompt);
               freshLobby.currentTurnDuration = settings.duration;
               freshLobby.turnTimerRemaining = freshLobby.currentTurnDuration;
               freshLobby.turnExpiresAt = Date.now() + freshLobby.currentTurnDuration;
@@ -712,6 +731,7 @@ wss.on("connection", (ws) => {
           lobby.players.forEach(p => {
             p.lives = 3;
             p.score = 0;
+            p.typingText = "";
           });
 
           if (lobby.isSolo) {
@@ -742,7 +762,8 @@ wss.on("connection", (ws) => {
                 freshLobby.currentRound = 1;
                 freshLobby.turnsPlayedInCurrentRound = 0;
                 const settings = getRoundSettings(1);
-                freshLobby.prompt = generatePrompt(settings.promptLength);
+                const oldPrompt = freshLobby.prompt;
+                freshLobby.prompt = generatePrompt(settings.promptLength, oldPrompt);
                 freshLobby.currentTurnDuration = settings.duration;
                 freshLobby.turnTimerRemaining = freshLobby.currentTurnDuration;
                 freshLobby.turnExpiresAt = Date.now() + freshLobby.currentTurnDuration;
@@ -760,6 +781,23 @@ wss.on("connection", (ws) => {
             addLobbyLog(lobby, "Rematch initiated. Waiting for start...");
             await setLobby(lobby.id, lobby);
             broadcastLobbyState(lobby, wss);
+          }
+          break;
+        }
+
+        case "typing_update": {
+          const { lobbyId, text } = message;
+          const info = clientLobbies.get(ws);
+          if (info && info.lobbyId === lobbyId) {
+            const lobby = await getLobby(lobbyId);
+            if (lobby) {
+              const player = lobby.players.find(p => p.id === info.playerId);
+              if (player) {
+                player.typingText = text || "";
+                await setLobby(lobby.id, lobby);
+                broadcastLobbyState(lobby, wss);
+              }
+            }
           }
           break;
         }

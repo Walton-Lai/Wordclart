@@ -11,6 +11,7 @@ export interface Player {
   isHost: boolean;
   avatarSeed: string;
   isConnected: boolean;
+  typingText?: string;
 }
 
 export interface LobbyState {

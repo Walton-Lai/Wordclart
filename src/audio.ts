@@ -9,12 +9,28 @@ class AudioManager {
   private muted: boolean = false;
   private noiseBuffer: AudioBuffer | null = null;
 
+  constructor() {
+    if (typeof window !== "undefined" && typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) {
+          if (this.ctx && this.ctx.state === "running") {
+            this.ctx.suspend().catch(() => {});
+          }
+        } else {
+          if (this.ctx && this.ctx.state === "suspended") {
+            this.ctx.resume().catch(() => {});
+          }
+        }
+      });
+    }
+  }
+
   private initCtx() {
     if (!this.ctx) {
       this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     }
-    if (this.ctx.state === "suspended") {
-      this.ctx.resume();
+    if (this.ctx.state === "suspended" && !document.hidden) {
+      this.ctx.resume().catch(() => {});
     }
   }
 
@@ -37,11 +53,11 @@ class AudioManager {
   }
 
   isMuted() {
-    return this.muted;
+    return this.muted || (typeof document !== "undefined" && document.hidden);
   }
 
   playType() {
-    if (this.muted) return;
+    if (this.isMuted()) return;
     try {
       this.initCtx();
       if (!this.ctx) return;
@@ -66,7 +82,7 @@ class AudioManager {
   }
 
   playTick(isTock: boolean = false) {
-    if (this.muted) return;
+    if (this.isMuted()) return;
     try {
       this.initCtx();
       if (!this.ctx) return;
@@ -119,7 +135,7 @@ class AudioManager {
   }
 
   playExplode() {
-    if (this.muted) return;
+    if (this.isMuted()) return;
     try {
       this.initCtx();
       if (!this.ctx) return;
@@ -170,7 +186,7 @@ class AudioManager {
   }
 
   playSuccess() {
-    if (this.muted) return;
+    if (this.isMuted()) return;
     try {
       this.initCtx();
       if (!this.ctx) return;
@@ -195,7 +211,7 @@ class AudioManager {
   }
 
   playOpen() {
-    if (this.muted) return;
+    if (this.isMuted()) return;
     try {
       this.initCtx();
       if (!this.ctx) return;
@@ -222,7 +238,7 @@ class AudioManager {
   }
 
   playClose() {
-    if (this.muted) return;
+    if (this.isMuted()) return;
     try {
       this.initCtx();
       if (!this.ctx) return;
@@ -249,7 +265,7 @@ class AudioManager {
   }
 
   playError() {
-    if (this.muted) return;
+    if (this.isMuted()) return;
     try {
       this.initCtx();
       if (!this.ctx) return;
@@ -274,7 +290,7 @@ class AudioManager {
   }
 
   playCountdown(value?: number) {
-    if (this.muted) return;
+    if (this.isMuted()) return;
     try {
       this.initCtx();
       if (!this.ctx) return;
@@ -329,7 +345,7 @@ class AudioManager {
   }
 
   playGameOver(victory: boolean) {
-    if (this.muted) return;
+    if (this.isMuted()) return;
     try {
       this.initCtx();
       if (!this.ctx) return;

@@ -303,6 +303,13 @@ export default function App() {
     const clean = inputText.trim().toUpperCase();
     setInputText("");
 
+    // Clear typing text on the server immediately
+    socketRef.current.send(JSON.stringify({
+      type: "typing_update",
+      lobbyId: lobby.id,
+      text: ""
+    }));
+
     socketRef.current.send(JSON.stringify({
       type: "submit_word",
       lobbyId: lobby.id,
@@ -1046,10 +1053,12 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Central Prompt Square (Image 4 - Thick Yellow Border Box) */}
+                {/* Central Prompt Square (Image 4 - Thick Yellow/Red Border Box) */}
                 <div className="flex flex-col items-center justify-center py-4">
-                  <div className={`relative w-64 h-64 sm:w-72 sm:h-72 rounded-none flex flex-col items-center justify-center border-[5px] border-[#facc15] transition-all bg-[#1c1b1b] shadow-[8px_8px_0px_0px_rgba(255,255,255,0.1)] ${
-                    getTimerRemainingPercent() <= 35 ? "anxiety-flash-red" : ""
+                  <div className={`relative w-64 h-64 sm:w-72 sm:h-72 rounded-none flex flex-col items-center justify-center border-[5px] transition-all bg-[#1c1b1b] shadow-[8px_8px_0px_0px_rgba(255,255,255,0.1)] ${
+                    isOurTurn 
+                      ? (getTimerRemainingPercent() <= 35 ? "anxiety-flash-red border-red-500 ring-4 ring-red-500/20" : "border-[#facc15] ring-4 ring-[#facc15]/35") 
+                      : "border-red-600/40 opacity-90"
                   }`}>
                     {/* Prompt Header */}
                     <span className="text-gray-400 font-black text-[10px] uppercase tracking-[0.25em] mb-2 select-none">WORD THAT CONTAINS...</span>
@@ -1060,7 +1069,9 @@ export default function App() {
                     </div>
 
                     {/* Clock badge top right (Image 4 - Yellow badge) */}
-                    <div className="absolute -top-3.5 -right-3.5 bg-[#facc15] text-black border-[3px] border-white px-3 py-1.5 font-black text-xs flex items-center gap-1.5 shadow-[2px_2px_0px_0px_white]">
+                    <div className={`absolute -top-3.5 -right-3.5 text-black border-[3px] border-white px-3 py-1.5 font-black text-xs flex items-center gap-1.5 shadow-[2px_2px_0px_0px_white] ${
+                      isOurTurn ? "bg-[#facc15]" : "bg-red-500 text-white"
+                    }`}>
                       <Timer className="w-4 h-4" />
                       <span>{(localTimerRemaining / 1000).toFixed(1)}s LEFT</span>
                     </div>
@@ -1071,44 +1082,89 @@ export default function App() {
                       <span className="text-gray-600">|</span>
                       <span>Pace: {(lobby.currentTurnDuration / 1000).toFixed(1)}s</span>
                     </div>
+
+                    {/* Active turn badge inside the box */}
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-full text-center px-4">
+                      {isOurTurn ? (
+                        <span className="text-[#facc15] font-black text-[10px] uppercase tracking-[0.25em] animate-pulse bg-black/60 px-2.5 py-1 border border-[#facc15]/20">
+                          ⚡ ACTIVE TURN • YOU ⚡
+                        </span>
+                      ) : (
+                        <span className="text-red-500 font-black text-[10px] uppercase tracking-[0.25em] bg-black/60 px-2.5 py-1 border border-red-500/20">
+                          ⏳ {activePlayer ? activePlayer.name.toUpperCase() : "OPPONENT"}'S TURN ⏳
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                {/* Spaced Input Field (Image 4) */}
+                {/* Spaced Input Field / Real-time typing display */}
                 <div className="w-full max-w-md mx-auto" onClick={(e) => e.stopPropagation()}>
-                  <form onSubmit={submitWord} className="relative flex flex-col items-center gap-3">
-                    <div className="w-full relative">
-                      <input 
-                        ref={inputRef}
-                        type="text"
-                        placeholder={isOurTurn ? "TYPE WORD..." : "WAITING..."}
-                        value={inputText}
-                        onChange={(e) => {
-                          const lettersOnly = e.target.value.replace(/[^a-zA-Z]/g, '');
-                          setInputText(lettersOnly.toUpperCase());
-                          audio.playType();
-                        }}
-                        disabled={!isOurTurn}
-                        maxLength={24}
-                        autoFocus
-                        className={`w-full bg-transparent border-b-[5px] py-3 px-12 text-center font-black text-3xl text-white placeholder:text-gray-800 tracking-[0.2em] focus:outline-none uppercase ${
-                          isOurTurn ? "border-[#facc15]" : "border-gray-800 cursor-not-allowed"
-                        }`}
-                      />
-                      {isOurTurn && inputText.length > 0 && (
-                        <button 
-                          type="submit"
-                          className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-[#facc15] text-black border-2 border-white flex items-center justify-center font-black rounded-none"
-                        >
-                          ↵
-                        </button>
-                      )}
-                    </div>
+                  {isOurTurn ? (
+                    <form onSubmit={submitWord} className="relative flex flex-col items-center gap-3">
+                      <div className="w-full relative">
+                        <input 
+                          ref={inputRef}
+                          type="text"
+                          placeholder="TYPE WORD..."
+                          value={inputText}
+                          onChange={(e) => {
+                            const lettersOnly = e.target.value.replace(/[^a-zA-Z]/g, '');
+                            const upper = lettersOnly.toUpperCase();
+                            setInputText(upper);
+                            audio.playType();
+                            if (socketRef.current && lobby) {
+                              socketRef.current.send(JSON.stringify({
+                                type: "typing_update",
+                                lobbyId: lobby.id,
+                                text: upper
+                              }));
+                            }
+                          }}
+                          disabled={false}
+                          maxLength={24}
+                          autoFocus
+                          className="w-full bg-transparent border-b-[5px] border-[#facc15] py-3 px-12 text-center font-black text-3xl text-white placeholder:text-gray-800 tracking-[0.2em] focus:outline-none uppercase"
+                        />
+                        {inputText.length > 0 && (
+                          <button 
+                            type="submit"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-[#facc15] text-black border-2 border-white flex items-center justify-center font-black rounded-none"
+                          >
+                            ↵
+                          </button>
+                        )}
+                      </div>
 
-                    <p className="text-center text-[10.5px] font-black uppercase tracking-wider text-gray-400">
-                      Enter a word containing <span className="text-[#facc15] font-bold">"{lobby.prompt}"</span>
-                    </p>
-                  </form>
+                      <p className="text-center text-[10.5px] font-black uppercase tracking-wider text-gray-400">
+                        Enter a word containing <span className="text-[#facc15] font-bold">"{lobby.prompt}"</span>
+                      </p>
+                    </form>
+                  ) : (
+                    <div className="relative flex flex-col items-center gap-3">
+                      <div className="w-full bg-zinc-950/40 border-[3px] border-dashed border-red-500/30 py-4 px-6 text-center select-none min-h-[80px] flex flex-col items-center justify-center relative overflow-hidden">
+                        {/* Little indicator tab */}
+                        <span className="absolute top-1 left-2 text-[8px] font-black tracking-widest text-red-500 uppercase animate-pulse">
+                          LIVE VIEW • {activePlayer ? activePlayer.name.toUpperCase() : "OPPONENT"} IS TYPING
+                        </span>
+                        
+                        <span className="font-mono font-black text-2xl text-[#facc15] tracking-[0.2em] uppercase block break-all pt-2">
+                          {activePlayer?.typingText ? (
+                            <>
+                              {activePlayer.typingText}
+                              <span className="animate-ping inline-block w-2.5 h-6 ml-1 bg-[#facc15] align-middle" />
+                            </>
+                          ) : (
+                            <span className="text-gray-600 italic tracking-wider text-sm">WAITING FOR THEM TO TYPE...</span>
+                          )}
+                        </span>
+                      </div>
+                      
+                      <p className="text-center text-[10.5px] font-black uppercase tracking-wider text-gray-500">
+                        You can see what they type in real-time above!
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Footer players status list (Image 4) */}
@@ -1117,6 +1173,7 @@ export default function App() {
                     {lobby.players.map((p) => {
                       const isActive = activePlayer && activePlayer.id === p.id;
                       const isEliminated = p.lives <= 0;
+                      const isUs = p.id === playerId;
                       return (
                         <div 
                           key={p.id}
@@ -1124,14 +1181,23 @@ export default function App() {
                             isEliminated 
                               ? "bg-[#131313] border-gray-800 opacity-45 grayscale"
                               : isActive 
-                              ? "bg-[#1c1b1b] border-[#facc15] shadow-[3px_3px_0px_0px_white]" 
-                              : "bg-[#1c1b1b] border-white/60"
+                              ? isUs 
+                                ? "bg-[#1c1b1b] border-[#facc15] shadow-[0_0_15px_rgba(250,204,21,0.4)] animate-pulse" 
+                                : "bg-[#1c1b1b] border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.3)]"
+                              : "bg-[#1c1b1b] border-white/40"
                           }`}
                         >
-                          <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center justify-between gap-1">
                             <span className="font-black text-xs text-white uppercase truncate block">
-                              {p.name}
+                              {p.name} {isUs && <span className="text-[#facc15] text-[9px] font-bold tracking-widest ml-1">(YOU)</span>}
                             </span>
+                            {isActive && !isEliminated && (
+                              <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-none uppercase tracking-wider ${
+                                isUs ? "bg-[#facc15] text-black" : "bg-red-500 text-white"
+                              }`}>
+                                {isUs ? "YOUR TURN" : "THEIR TURN"}
+                              </span>
+                            )}
                           </div>
 
                           {/* Hearts layout */}
@@ -1153,6 +1219,14 @@ export default function App() {
                             })}
                           </div>
 
+                          {/* Live typing on the opponent's player card */}
+                          {!isEliminated && p.typingText && !isUs && (
+                            <div className="mt-1 bg-black/45 px-2 py-1 border border-red-500/20 rounded-none">
+                              <span className="text-[7.5px] text-red-400 font-black uppercase tracking-wider block leading-none">TYPING:</span>
+                              <span className="text-[11px] font-mono text-[#facc15] font-black truncate block mt-0.5">{p.typingText}</span>
+                            </div>
+                          )}
+
                           {/* State labels */}
                           {isEliminated ? (
                             <span className="text-[8px] bg-red-600 text-white font-black px-1 py-0.5 uppercase tracking-wider text-center mt-1">
@@ -1160,9 +1234,11 @@ export default function App() {
                             </span>
                           ) : (
                             isActive && (
-                              <div className="h-1 w-full bg-gray-800 overflow-hidden mt-1">
+                              <div className="h-1.5 w-full bg-gray-800 overflow-hidden mt-1">
                                 <div 
-                                  className="h-full bg-[#facc15] transition-[width] duration-30 ease-out"
+                                  className={`h-full transition-[width] duration-30 ease-out ${
+                                    isUs ? "bg-[#facc15]" : "bg-red-500"
+                                  }`}
                                   style={{ width: `${getTimerRemainingPercent()}%` }}
                                 />
                               </div>
