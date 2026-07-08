@@ -662,7 +662,8 @@ export default function App() {
                         <Plus className="w-6 h-6 stroke-[3] text-black" />
                       </div>
                       <span className="font-black text-xl uppercase tracking-tight">PRIVATE ROOM</span>
-                      <span className="text-xs font-bold uppercase tracking-wider text-black/70">Challenge friends (up to 5 players)</span>
+                      <span className="text-sm font-bold uppercase tracking-wider text-black/70 mt-1">Challenge friends</span>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">Up to 5 players</span>
                     </button>
                     {/* Hard offset yellow block */}
                     <div className="absolute inset-0 bg-white translate-x-2 translate-y-2 -z-10 rounded-none border-[3px] border-white" />
